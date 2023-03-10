@@ -2,34 +2,37 @@
   import { writable } from 'svelte/store'
   import { keys, layout } from './maps.js'
 
-  let kbn = null
+  type KeyBinds = { [key: string]: { fn: () => void, id: string, type?: 'icon' } }
+  type Condition = (code: string, e: MouseEvent) => boolean | null
 
-  export const binds = writable(null)
-  binds.subscribe((obj) => {
-    kbn = obj ?? {}
+  let keyBinds: KeyBinds | null = null
+  export const _keyBinds = writable<Keybinds | null>(null)
+  _keyBinds.subscribe((obj) => {
+    keyBinds = obj ?? {}
   })
 
-  let cnd = null
-
-  export const condition = writable(() => true)
-  condition.subscribe((fn) => {
+  let condition: Condition | null = null
+  export const _condition = writable<Condition>(() => true)
+  _condition.subscribe((fn) => {
     if (typeof fn !== 'function') throw new Error('Condition must be a function')
-    cnd = fn
+    condition = fn
   })
 
   window.addEventListener('keydown', runBind)
 
-  async function runBind (e) {
-    if (await cnd(e)) kbn[layout[e.code] || e.code]?.fn?.(e)
+  async function runBind (code: string, e: MouseEvent) {
+    console.log(layout[code]);
+    console.log(code);
+    if (await condition(e)) keyBinds[layout[code] || code]?.fn?.(e)
   }
 
-  export function loadWithDefaults (defaults) {
+  export function loadWithDefaults (defaults: KeyBinds) {
     const def = toIDmap(defaults)
     const saved = JSON.parse(localStorage.getItem('thaunknown/svelte-keybinds'))
     for (const id in saved) {
       saved[id].fn = def[id]?.fn
     }
-    binds.set(toKeyMap({ ...def, ...saved }))
+    _keyBinds.set(toKeyMap({ ...def, ...saved }))
   }
 
   function toIDmap (target = {}) {
@@ -51,7 +54,11 @@
   }
 
   function save () {
-    localStorage.setItem('thaunknown/svelte-keybinds', JSON.stringify(toIDmap(kbn)))
+    localStorage.setItem('thaunknown/svelte-keybinds', JSON.stringify(toIDmap(keyBinds)))
+  }
+
+  function load() {
+    return JSON.parse(localStorage.getItem('thaunknown/svelte-keybinds'))
   }
 </script>
 
@@ -60,7 +67,7 @@
 
   export let clickable = false
 
-  const kbnref = kbn
+  const kbnref = keyBinds
   let dragged = null
   function draggable (node, code) {
     let drag = false
@@ -92,7 +99,7 @@
         kbnref[code] = kbnref[targetcode]
         delete kbnref[targetcode]
       }
-      binds.set(kbnref)
+      _keyBinds.set(kbnref)
       if (autosave === true) {
         save()
       }
@@ -108,9 +115,10 @@
       draggable={!!kbnref[name]}
       data-code={name}
       class='w-{size || 50}'
+      title='{kbnref[name]}'
       {...$$restProps}
       use:draggable={name}
-      on:click={(e) => clickable && runBind(Object.assign(e, { code: name }))}>
+      on:click={(e) => clickable && runBind(name, e)}>
       <slot prop={kbnref[name]} />
     </div>
   {/each}
